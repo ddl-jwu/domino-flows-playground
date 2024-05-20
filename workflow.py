@@ -4,6 +4,15 @@ from flytekit.types.file import FlyteFile
 from flytekit.types.directory import FlyteDirectory
 from typing import TypeVar, Optional, List, Dict
 import pandas as pd
+from datetime import datetime, timedelta
+from enum import Enum
+
+class Weekday(Enum):
+    MON = "Monday"
+    TUE = "Tuesday"
+    WED = "Wednesday"
+    THU = "Thursday"
+    FRI = "Friday"
 
 @workflow
 def training_workflow(data_path: str) -> FlyteFile: 
@@ -112,6 +121,10 @@ def generate_types():
             Input(name="learning_rate", type=float, value=0.001),
             Input(name="do_eval", type=bool, value=True),
             Input(name="list", type=List[int], value=[1,2,3,4,5]),
+            Input(name="date", type=datetime, value=datetime.now()),
+            Input(name="duration", type=timedelta, value=timedelta(days=5)),
+            Input(name="bytes", type=bytes, value=bytes([104, 101, 108, 108, 111])),
+            Input(name="enum", type=Weekday, value=Weekday.MON),
             Input(
                 name="dict", 
                 type=Dict[str,int], 
@@ -218,3 +231,18 @@ def training_workflow_mlflow():
     )
 
     return
+
+@workflow
+def pdf_copy(): 
+
+    pdf = DominoTask(
+        name="Copy PDF",
+        command="sas -stdio scripts/file-copy.sas",
+        environment="SAS Analytics Pro",
+        hardware_tier="Small",
+        outputs=[
+            Output(name="report", type=FlyteFile[TypeVar("pdf")]),
+        ]
+    )
+
+    return 
