@@ -1,1 +1,1 @@
-x "cp /mnt/code/scripts/report.pdf /workflows/outputs/";
+x "cp /mnt/code/scripts/report.pdf /workflow/outputs/";
