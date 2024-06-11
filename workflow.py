@@ -1,5 +1,6 @@
 from utils.flyte import DominoTask, Input, Output
-from flytekit import workflow
+from flytekitplugins.domino.helpers import run_domino_job_task, DominoJobTask, DominoJobConfig
+from flytekit import workflow, dynamic
 from flytekit.types.file import FlyteFile
 from flytekit.types.directory import FlyteDirectory
 from typing import TypeVar, Optional, List, Dict
@@ -246,3 +247,150 @@ def pdf_copy():
     )
 
     return 
+
+@workflow
+def data_science_workflow(data_path: str): 
+    """
+
+    pyflyte run --remote workflow.py data_science_workflow --data_path /mnt/code/artifacts/data.csv
+
+    """
+
+    load_s3_data = DominoTask(
+        name="Load S3 data",
+        command="mkdir /workflow/outputs/data",
+        environment="Data Prep Environment",
+        hardware_tier="Small",
+        inputs=[
+            Input(name="data_path", type=str, value=data_path),
+        ],
+        outputs=[
+            Output(name="data", type=FlyteFile)
+        ]
+    )
+
+    load_snowflake_data = DominoTask(
+        name="Load Snowflake data",
+        command="mkdir /workflow/outputs/data",
+        environment="Data Prep Environment",
+        hardware_tier="Small",
+        inputs=[
+            Input(name="data_path", type=str, value=data_path),
+        ],
+        outputs=[
+            Output(name="data", type=FlyteFile)
+        ]
+    )
+
+    processed_data = DominoTask(
+        name="Process data",
+        command="mkdir /workflow/outputs/train_data",
+        environment="Data Prep Environment",
+        hardware_tier="Small",
+        inputs=[
+            Input(name="s3_data", type=FlyteFile, value=load_s3_data['data']),
+            Input(name="snowflake_data", type=FlyteFile, value=load_snowflake_data['data'])
+        ],
+        outputs=[
+            Output(name="train_data", type=FlyteFile)
+        ]
+    )
+
+    train_model = DominoTask(
+        name="Train model",
+        command="mkdir /workflow/outputs/model",
+        environment="Data Prep Environment",
+        hardware_tier="Small",
+        inputs=[
+            Input(name="data", type=FlyteFile, value=processed_data['train_data'])
+        ],
+        outputs=[
+            Output(name="model", type=FlyteFile)
+        ]
+    )
+
+    evaluate_model = DominoTask(
+        name="Evaluate model",
+        command="sleep 10",
+        environment="Data Prep Environment",
+        hardware_tier="Small",
+        inputs=[
+            Input(name="data", type=FlyteFile, value=processed_data['train_data']),
+            Input(name="model", type=FlyteFile, value=train_model['model'])
+        ]
+    )
+
+    return 
+
+
+@dynamic
+def training_workflow_dynamic(data_path: str, name: str) -> FlyteFile: 
+    """
+    Sample data preparation and training workflow
+
+    This workflow accepts a path to a CSV for some initial input and simulates
+    the processing of the data and usage of the processed data in a training job.
+
+    To run this workflowp, execute the following line in the terminal
+
+    pyflyte run --remote workflow.py training_workflow_dynamic --data_path /mnt/code/artifacts/data.csv
+
+    :param data_path: Path of the CSV file data
+    :return: The training results as a model
+    """
+
+    data_prep_results = DominoTask(
+        name=name,
+        command="python /mnt/code/scripts/prep-data.py",
+        environment="Data Prep Environment",
+        hardware_tier="Small",
+        inputs=[
+            Input(name="data_path", type=str, value=data_path)
+        ],
+        outputs=[
+            Output(name="processed_data", type=FlyteFile)
+        ]
+    )
+
+    training_results = DominoTask(
+        name="Train model ",
+        command="python /mnt/code/scripts/train-model.py",
+        environment="Training Environment",
+        hardware_tier="Medium",
+        inputs=[
+            Input(name="processed_data", type=FlyteFile, value=data_prep_results['processed_data']),
+            Input(name="epochs", type=int, value=10),
+            Input(name="batch_size", type=int, value=32)
+        ],
+        outputs=[
+            Output(name="model", type=FlyteFile)
+        ]
+    )
+
+    return training_results['model']
+
+
+@workflow
+def simple_math_workflow(a: int, b: int) -> float:
+
+    # Create first task
+    add_task = DominoJobTask(
+        name='Add numbers',
+        domino_job_config=DominoJobConfig(Command="python add.py"),
+        inputs={'first_value': int, 'second_value': int},
+        outputs={'sum': int},
+        use_latest=True
+    )
+    sum = add_task(first_value=a, second_value=b)
+
+    # Create second task
+    sqrt_task = DominoJobTask(
+        name='Square root',
+        domino_job_config=DominoJobConfig(Command="python sqrt.py"),
+        inputs={'value': int},
+        outputs={'sqrt': float},
+        use_latest=True
+    )
+    sqrt = sqrt_task(value=sum)
+
+    return sqrt
